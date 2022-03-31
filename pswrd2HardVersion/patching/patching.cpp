@@ -1,43 +1,74 @@
-// ToDo: 1) printf -> cout; 2) change hard code; 3) create const for file path;
-//       4) create function that facilitate main; 5) delete function how2timer;
-//       5) fprintf( stderr, ... ); 6) create one code style.
-
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
-#include <cstdio>
-#include <cstdlib>
+#include <iostream>
 #include <fstream>
 #include <cassert>
-#include <ctime>
+#include <thread>
+#include <chrono>
 
-void PatchFile( FILE *finput);
-void how2timer( int ms );
+enum ErrorCode
+{
+    NO_ERROR,
+    NO_FONT_FILE,
+    NO_IMAGE_FILE,
+    NO_PATCH_FILE,
+    FSEEK_ERROR
+};
 
-const char* FINPUT = "../PSWRD21.COM";
+ErrorCode PatchFile( FILE *finput);
+ErrorCode RunPatching( sf::Sprite backgroundImage, sf::Sprite buttonImage, sf::Text buttonText, sf::RectangleShape progressBar, sf::Text progressBarText );
+
+const double SCREEN_LENGTH = 1920;
+const double SCREEN_WIDTH  = 1080;
+
+const double X_BUTTON_COORDINATE = 45    ;
+const double Y_BUTTON_COORDINATE = 538.75;
+
+const double X_TEXT_BUTTON_COORDINATE = 300;
+const double Y_TEXT_BUTTON_COORDINATE = 650;
+
+const double X_PROGRESS_BAR_COORDINATE = 180;
+const double Y_PROGRESS_BAR_COORDINATE = 750;
+
+const double Y_PROGRESS_BAR_TEXT_COORDINATE = 746;
+
+const char* FILE_FOR_PATCH         = "../PSWRD21.COM"   ;
+const char* FILE_FONT              = "images/font.ttf"  ;
+const char* FILE_IMAGE_BACK_GROUND = "images/rkn.jpeg"  ;
+const char* FILE_IMAGE_BUTTON      = "images/button.png";
 
 int main()
 {
-    sf::RenderWindow window( sf::VideoMode(1920 , 1080), "", sf::Style::Default );
+    ErrorCode errorCode = NO_ERROR;
 
     sf::Font font;
-    if ( !font.loadFromFile( "images/font.ttf" ) )
-        printf( "Can't find the font file\n" );
+    if ( !font.loadFromFile( FILE_FONT ) )
+    {
+        std::cerr << "Can't find the font file" << std::endl;
+        errorCode = NO_FONT_FILE;
+    }
 
     sf::Texture background;
     sf::Sprite backgroundImage;
-    if ( !background.loadFromFile( "images/rkn.jpeg" ) )
-        printf( "Error: Could not display rkn image\n" );
+    if ( !background.loadFromFile( FILE_IMAGE_BACK_GROUND ) )
+    {
+        std::cerr << "Couldn`t display image" << std::endl;
+        errorCode = NO_IMAGE_FILE;
+    }
     backgroundImage.setTexture( background, true );
-    sf::Vector2f targetSize(1920.0f, 1080.0f);
+    sf::Vector2f targetSize( SCREEN_LENGTH, SCREEN_WIDTH );
     float zoomX = targetSize.x / backgroundImage.getLocalBounds().width;
     float zoomY = targetSize.y / backgroundImage.getLocalBounds().height;
     backgroundImage.setScale( zoomX, zoomY );
 
     sf::Texture button;
     sf::Sprite buttonImage;
-    if ( !button.loadFromFile( "images/button.png" ) )
-        printf( "Can't find the image" );
-    buttonImage.setPosition( 45.0f, 538.75f );
+    if ( !button.loadFromFile( FILE_IMAGE_BUTTON ) )
+    {
+        std::cerr << "Can't find the image" << std::endl;
+        errorCode = NO_IMAGE_FILE;
+    }
+    buttonImage.setPosition( X_BUTTON_COORDINATE, Y_BUTTON_COORDINATE );
     buttonImage.setScale( zoomX, zoomY );
     buttonImage.setTexture( button );
 
@@ -47,21 +78,69 @@ int main()
     buttonText.setString( "Hacking" );
     buttonText.setFillColor( sf::Color::Black );
     buttonText.setCharacterSize( 100 );
-    buttonText.setPosition( 300.0f, 650.0f );
+    buttonText.setPosition( X_TEXT_BUTTON_COORDINATE, Y_TEXT_BUTTON_COORDINATE );
 
-    int percent = 100;
-    sf::RectangleShape progressbar;
-    progressbar.setFillColor(sf::Color::Blue);
-    progressbar.setOutlineThickness( 3 );
-    progressbar.setPosition( 180.0f, 750.0f );
-    progressbar.setOutlineColor(sf::Color::Black);
+    sf::RectangleShape progressBar;
+    progressBar.setFillColor(sf::Color::Blue);
+    progressBar.setOutlineThickness( 3 );
+    progressBar.setPosition( X_PROGRESS_BAR_COORDINATE, Y_PROGRESS_BAR_COORDINATE );
+    progressBar.setOutlineColor(sf::Color::Black);
 
-    sf::Text progressbarText;
-    progressbarText.setFont( font );
-    progressbarText.setStyle( sf::Text::Bold );
-    progressbarText.setFillColor( sf::Color::Black );
-    progressbarText.setCharacterSize( 40 );
-    
+    sf::Text progressBarText;
+    progressBarText.setFont( font );
+    progressBarText.setStyle( sf::Text::Bold );
+    progressBarText.setFillColor( sf::Color::Black );
+    progressBarText.setCharacterSize( 40 );
+
+    if ( !errorCode )
+        errorCode = RunPatching( backgroundImage, buttonImage, buttonText, progressBar, progressBarText );
+
+  return errorCode;
+}
+
+ErrorCode PatchFile( FILE *finput)
+{
+    if( finput == nullptr )
+        return NO_PATCH_FILE;
+
+    unsigned char isAccess = 0;
+    unsigned int position  = 157;
+
+    if ( fseek ( finput, position, SEEK_SET ) )
+    {
+        std::cerr << "The pointer to the file position has not been moved" << std::endl;
+        return FSEEK_ERROR;
+    }
+
+    fscanf( finput, "%c", &isAccess );
+
+    if ( isAccess )
+    {
+        std::cerr << "File already patching" << std::endl;
+    }
+    else
+    {
+        isAccess = 1;
+
+        if ( fseek ( finput, position, SEEK_SET ) )
+        {
+            std::cerr << "The pointer to the file position has not been moved" << std::endl;
+            return FSEEK_ERROR;
+        }
+
+        fwrite( &isAccess, sizeof( char ), 1, finput );
+
+        std::cout << "File successful patching" << std::endl;
+    }
+
+    return NO_ERROR;
+}
+
+ErrorCode RunPatching( sf::Sprite backgroundImage, sf::Sprite buttonImage, sf::Text buttonText, sf::RectangleShape progressBar, sf::Text progressBarText )
+{
+    ErrorCode errorCode = NO_ERROR;
+    sf::RenderWindow window( sf::VideoMode( SCREEN_LENGTH, SCREEN_WIDTH ), "", sf::Style::Default );
+
     while ( window.isOpen() )
     {
         sf::Event Event;
@@ -70,8 +149,10 @@ int main()
             switch ( Event.type )
             {
                 case sf::Event::Closed:
+                {
                     window.close();
                     break;
+                }
                 case sf::Event::MouseMoved:
                 {
                     sf::Vector2i mousePos = sf::Mouse::getPosition( window );
@@ -84,35 +165,38 @@ int main()
                     {
                         buttonImage.setColor( sf::Color( 255, 255, 255 ) );
                     }
+                    break;
                 }
-                break;
                 case sf::Event::MouseButtonPressed:
                 {
                     sf::Vector2i mousePos = sf::Mouse::getPosition( window );
                     sf::Vector2f mousePosF( static_cast<float>( mousePos.x ), static_cast<float>( mousePos.y ) );
                     if ( buttonImage.getGlobalBounds().contains( mousePosF ) )
                     {
-                        FILE *finput = fopen( FINPUT, "r+b" );
-                        PatchFile( finput );
-                        while ( percent > 1 )
+                        int n_percents = 100;
+                        FILE *finput = fopen( FILE_FOR_PATCH, "r+b" );
+                        errorCode = PatchFile( finput );
+                        while ( n_percents > 1 )
                         {
-                            progressbar.setSize( sf::Vector2f( (100 - percent) * 7, 40) );
-                            progressbarText.setPosition( 150.0f + (100 - percent) * 7 / 2, 746.0f );
-                            progressbarText.setString( std::to_string(100 - percent) + "%" );
+                            int PROGRESS_BAR_LENGTH = (100 - n_percents) * 7;
+                            progressBar.setSize( sf::Vector2f( PROGRESS_BAR_LENGTH, 40) );
+                            double X_PROGRESS_BAR_TEXT_COORDINATE = 150 + (100 - n_percents) * 7 / 2;
+                            progressBarText.setPosition( X_PROGRESS_BAR_TEXT_COORDINATE, Y_PROGRESS_BAR_TEXT_COORDINATE );
+                            progressBarText.setString( std::to_string(100 - n_percents) + "%" );
                             window.clear();
                             window.draw( backgroundImage );
-                            window.draw( progressbar );
-                            window.draw( progressbarText );
+                            window.draw( progressBar );
+                            window.draw( progressBarText );
                             window.display();
-                            percent--;
-                            how2timer(100);
+                            n_percents--;
+                            std::this_thread::sleep_for (std::chrono::milliseconds(100));
                         }
                         fclose( finput );
                         system ( "vlc -f --no-video-title-show --play-and-exit videos/rkn.mp4" );
                         window.close();
                     }
+                    break;
                 }
-                break;
             }
         }
 
@@ -123,51 +207,5 @@ int main()
     window.display();
     }
 
-  return 0;
-}
-
-void PatchFile( FILE *finput)
-{
-    assert( finput != nullptr );
-
-    unsigned char isAccess = 0;
-    unsigned int position  = 157;
-    
-    if ( fseek ( finput, position, SEEK_SET ) )
-    {
-        fprintf(stderr, "The pointer to the file position has not been moved\n" );
-        return;
-    }
-
-    fscanf( finput, "%c", &isAccess );
-
-    if ( isAccess )
-    {
-        printf( "File already patching\n" );
-    }
-    else
-    {
-        isAccess = 1;
-
-        if ( fseek ( finput, position, SEEK_SET ) )
-        {
-            printf( "The pointer to the file position has not been moved\n" );
-            return;
-        }
-
-        fwrite( &isAccess, sizeof( char ), 1, finput );
-
-        printf( "File successful patching\n" );
-    }
-
-    return;
-}
-
-void how2timer( int ms )
-{
-    int CLOCKS_PER_MSEC = CLOCKS_PER_SEC / 1000;   // new const
-    clock_t end_time = clock() + ms * CLOCKS_PER_MSEC ;  // time end
-    while (clock() < end_time) {}  // loop expectation time
-
-    return;
+    return errorCode;
 }
